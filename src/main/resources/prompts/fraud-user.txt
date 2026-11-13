@@ -1,0 +1,18 @@
+Investigate fraud case {caseId}.
+
+INVESTIGATION_GOAL: {investigationGoal}
+
+VALIDATED_CASE_SUMMARY (JSON):
+{caseSummary}
+
+TOOL_EVIDENCE (JSON, collected by allow-listed deterministic tools):
+{toolEvidence}
+
+POLICY_PASSAGE_COUNT: {policyPassageCount}
+POLICY_CONTEXT (JSON, retrieved passages above the similarity threshold):
+{policyContext}
+
+CONVERSATION_CONTEXT (case-scoped memory):
+{conversationContext}
+
+Assess the evidence against the policy passages and return the JSON recommendation only.

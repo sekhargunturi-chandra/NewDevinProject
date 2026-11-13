@@ -1,0 +1,567 @@
+BANKING & FINANCIAL SERVICE
+FINAL CAPSTONE PARTICIPANT GUIDE
+Design and build an explainable agentic assistant that collects fraud evidence, retrieves applicable policy, recommends a case route and keeps the final disposition with a human reviewer.
+
+SPRING AI
+Implementation path	LANGCHAIN4J
+Implementation path	HUMAN REVIEW
+Required control
+TOOLS + RAG
+Grounded evidence	STRUCTURED OUTPUT
+Validated contract	RULES MODE
+Safe fallback
+CASE MEMORY
+Isolated by case	AUDIT TRAIL
+Append-only	SYNTHETIC DATA
+Training only
+Participant outcome
+A runnable Java application, a clear audit trail, reproducible tests and a short demonstration of a policy-grounded fraud investigation.
+SAFETY BOUNDARY	The application may recommend a route, priority or evidence request. It must not block a card, issue a refund, move funds, file a report or contact a customer automatically.
+
+Guide map
+Use this map to move from the business problem to a demonstrable, review-ready implementation. The guide is framework-neutral at the domain layer and gives matched Spring AI and LangChain4j guidance where AI integration differs.
+Part	Section	Use it for
+01	Capstone brief	Problem, actors, scenario, boundaries and success criteria
+02	Functional design	Journey, stories, inputs, tools, states and decision contract
+03	Solution architecture	Layers, components, data, APIs and configuration
+04	Java AI implementation	Matched Spring AI and LangChain4j guidance
+05	Experience design	Six fraud-specific sample UI screens and UI acceptance criteria
+06	Delivery plan	Build phases, testing, security, rubric and submission
+07	Participant pack	Sample request, output, policy metadata and demonstration script
+
+What you must deliver
+•	A runnable Spring Boot repository with documented setup and no committed secrets.
+•	A fraud case intake API and participant-friendly UI.
+•	A framework-neutral FraudCaseProcessor contract with rules mode plus a Spring AI or LangChain4j implementation; implementing both is a comparison extension.
+•	At least four distinct evidence tools, deterministic synthetic fixtures and an observable execution trace.
+•	Policy ingestion, vector retrieval, exact citation metadata and abstention when policy context is insufficient.
+•	Case-scoped conversation memory, persistence for cases/evidence/recommendations/reviews, and an append-only audit trail.
+•	Schema-validated recommendation output and a human-review screen that records the final disposition and rationale.
+•	Unit, integration, contract and evaluation tests; a README, architecture view, screenshots and self-review.
+Explicitly out of scope
+•	Production customer data, payment credentials, unmasked identifiers or real bank connectivity.
+•	Autonomous financial, account-control, compliance or customer-contact actions.
+•	Unbounded tool permissions, silent policy changes or model output that bypasses application validation.
+•	Hidden chain-of-thought display. Show concise reasons, evidence, tool outcomes and policy passages instead.
+1. Capstone brief
+1.1 Business problem
+Payment-dispute teams receive cases with incomplete narratives and evidence distributed across transaction, customer, device, merchant, earlier-dispute and policy systems. Analysts must identify the dispute type, determine urgency, locate the applicable procedure and record why a case was routed to a particular queue. The capstone assistant accelerates those tasks while preserving human control.
+1.2 Primary users and value
+User	Need	Capstone response
+Service agent	Capture a complete case without exposing sensitive data.	Guided intake, validation, masking and a visible missing-information list.
+Fraud investigator	Collect and compare relevant signals quickly.	Tool-driven enrichment, evidence severity and a chronological trace.
+Dispute reviewer	Apply the correct process and queue.	Policy-grounded recommendation with citations and human-review controls.
+Team lead / auditor	Reproduce what happened.	Saved facts, tool results, retrieved passages, recommendation, disposition and audit events.
+
+1.3 Sample scenario
+SCENARIO	A customer reports an online purchase from a merchant they do not recognise. The payment was made from a newly observed device and a location inconsistent with recent trusted activity. The customer still has the card. The transaction is posted, but the authentication outcome is unavailable. The analyst must distinguish unauthorised use, merchant/billing dispute, duplicate processing or insufficient evidence.
+
+1.4 Success criteria
+•	A reviewer can create the sample case and see validated, masked intake data.
+•	The application selects approved tools, records arguments and outcomes, and never invents unavailable evidence.
+•	Relevant policy passages are retrieved with document ID, version, section, chunk ID and score.
+•	The recommendation conforms to the agreed schema, cites evidence and policy, lists missing information and always requires human review.
+•	The reviewer can accept, revise, reroute or reject the recommendation with a mandatory reason; the action is audited.
+•	Rules mode remains usable when the model is disabled; errors fail safely to incomplete/manual review.
+2. Functional design
+2.1 End-to-end journey
+Step	Stage	Required behaviour
+1	Intake	Validate mandatory fields; mask customer and payment identifiers.
+2	Plan	Classify the investigation goal and create a bounded evidence plan.
+3	Act	Invoke allow-listed transaction, device, location, merchant, history and SLA tools.
+4	Retrieve	Search approved policy content; retain passage metadata and similarity scores.
+5	Assess	Compare user facts, tool evidence and policy; identify contradictions and gaps.
+6	Recommend	Return a typed classification, risk, route, rationale, evidence and citations.
+7	Review	Require a human disposition and rationale before closing or routing the case.
+8	Audit	Persist important state changes, tool traces, citations and review actions.
+
+2.2 Case states
+State	Meaning	Allowed next state
+NEW	Case captured but not enriched.	ENRICHING
+ENRICHING	Tools and policy retrieval are running.	READY_FOR_REVIEW or INCOMPLETE
+INCOMPLETE	Required evidence is missing, contradictory or unavailable.	ENRICHING or CLOSED
+READY_FOR_REVIEW	Validated recommendation is available.	UNDER_REVIEW
+UNDER_REVIEW	A reviewer is evaluating the recommendation.	ROUTED or CLOSED
+ROUTED	Reviewer selected an operational route.	CLOSED
+CLOSED	Final disposition and audit data are recorded.	No transition
+
+2.3 Required user stories
+ID	Story
+US-01	As a service agent, I can create a case using masked references and a customer statement.
+US-02	As an investigator, I can start enrichment and see the bounded investigation plan.
+US-03	As an investigator, I can see every called tool, status, duration and evidence result.
+US-04	As a reviewer, I receive a structured recommendation with linked evidence and policy citations.
+US-05	As an investigator, I can ask follow-up questions without mixing context across cases.
+US-06	As a reviewer, I can request more information, reroute, close or override with a reason.
+US-07	As an auditor, I can reconstruct important events without sensitive payload logging.
+US-08	As a developer, I can switch rules, Spring AI and LangChain4j modes through configuration.
+
+2.4 Required intake fields
+Group	Fields	Validation
+Case	caseId, reportedAt, channel, analystId	Server-generated case ID; analyst identity from authenticated context.
+Customer	maskedCustomerRef, homeRegion	Masked/tokenised value only; no full account or card number.
+Transaction	transactionRef, amount, currency, occurredAt, status, channel, maskedMerchant	Positive amount; ISO currency; known enums; masked merchant text.
+Claim	issueType, customerStatement, cardPossession, merchantRecognised	Statement length limit; reject markup/scripts; preserve original text separately.
+Consent / control	syntheticDataConfirmed, reviewRequired	Both must be true in the participant implementation.
+
+2.5 Approved tool catalogue
+Tool	Purpose	Minimum result
+getTransactionDetails	Retrieve transaction state, channel and authentication fields.	found, status, timestamp, amount, channel, authOutcome, maskedMerchant
+getDeviceSignals	Check device novelty and trust indicators.	deviceKnown, firstSeenAt, trustLevel, observations
+compareRecentLocations	Compare current and recent trusted locations.	distanceKm, timeDelta, anomalyLevel, observations
+getMerchantRiskProfile	Return training merchant characteristics.	riskBand, blocklistMatch, category, observations
+getPriorDisputes	Summarise earlier claims for the masked customer.	count, similarCount, lookbackDays, observations
+calculateCaseSla	Calculate a training target for the proposed route.	queue, priority, targetAt, explanation
+retrievePolicyEvidence	Search approved policy chunks.	documentId, version, section, chunkId, score, passage
+saveAuditEvent	Append an important event.	eventId, eventType, recordedAt
+
+DETERMINISTIC FIXTURES	Derive demonstration evidence from a stable hash of the masked customer or transaction reference. Identical input must produce identical tool results so tests and demonstrations are reproducible.
+
+3. Decision model and output contract
+3.1 Classification and route
+Classification	Typical evidence	Recommended route
+UNAUTHORISED_TRANSACTION	Customer denies merchant; independent device/location/authentication anomalies.	FRAUD_INVESTIGATION
+MERCHANT_DISPUTE	Customer recognises merchant but disputes fulfilment, cancellation or amount.	DISPUTE_OPERATIONS
+DUPLICATE_PROCESSING	Matching payment fingerprint or duplicate posting evidence.	PAYMENT_OPERATIONS
+SUSPICIOUS_TRANSACTION	High-risk signals exist but the customer claim does not establish unauthorised use.	FRAUD_INVESTIGATION
+INSUFFICIENT_EVIDENCE	Required evidence unavailable, contradictory or below retrieval threshold.	MANUAL_REVIEW
+GENUINE_TRANSACTION	Evidence supports customer-authorised activity; still subject to reviewer confirmation.	MANUAL_REVIEW
+
+3.2 Deterministic fallback rules
+•	If mandatory evidence is missing, return INSUFFICIENT_EVIDENCE and require manual review.
+•	If a duplicate transaction fingerprint is confirmed, recommend PAYMENT_OPERATIONS.
+•	If multiple independently sourced high-severity anomalies are present, recommend FRAUD_INVESTIGATION.
+•	If the merchant is recognised and the issue concerns fulfilment, cancellation or amount, recommend DISPUTE_OPERATIONS.
+•	If no policy passage meets the configured threshold, do not invent a procedure; identify the gap and route to manual review.
+•	Every deterministic result must include rule IDs and the exact input facts used.
+3.3 Structured response
+Illustrative training response
+{
+  "caseId": "CASE-2026-0042",
+  "classification": "UNAUTHORISED_TRANSACTION",
+  "riskLevel": "HIGH",
+  "recommendedRoute": "FRAUD_INVESTIGATION",
+  "confidence": 0.86,
+  "humanReviewRequired": true,
+  "evidenceIds": ["EV-101", "EV-102", "EV-103"],
+  "policyCitations": [
+    {"documentId":"POL-CNP-017","version":"3.2","section":"3.2",
+     "chunkId":"cnp-032","score":0.89}
+  ],
+  "missingInformation": ["authentication challenge outcome"],
+  "ruleIds": [],
+  "toolTraceIds": ["TR-118", "TR-119", "TR-120"],
+  "rationale": "Route for human fraud review; no automated action taken."
+}
+
+3.4 Validation rules
+•	Parse model output into a typed DTO and validate it before persistence or display.
+•	Reject unknown enum values, confidence outside 0–1, missing case ID or malformed citations.
+•	Require at least one evidence item or an explicit insufficient-evidence outcome.
+•	Require humanReviewRequired=true for every recommendation.
+•	Require citation metadata when the rationale claims a procedural requirement.
+•	Do not expose hidden reasoning. Store and display only concise rationale, evidence links, citations and operational trace.
+4. Solution architecture
+4.1 Architecture principles
+•	Keep domain entities, rules, persistence and controllers independent of the Java AI framework.
+•	Separate deterministic evidence collection from model-assisted interpretation.
+•	Keep state transitions in application services, not in model output.
+•	Wrap provider/model/vector-store details in adapters selected through configuration.
+•	Persist provenance: every important fact should identify user intake, tool result, policy retrieval or reviewer entry.
+4.2 Logical layers
+Layer	Key components	Responsibility
+Experience	REST API, Thymeleaf UI	Case intake, investigation workspace, evidence, citations and review.
+Application	FraudCaseService, InvestigationOrchestrator	Validate, authorise, transition state, invoke processor and persist results.
+Domain	FraudCase, EvidenceItem, Recommendation, ReviewDisposition	Framework-neutral business contract, enums and invariants.
+AI adapters	SpringAiFraudCaseAgent, LangChain4jFraudCaseAgent	Prompts, tool registration, memory, retrieval augmentation and typed output.
+Rules adapter	RulesFraudCaseAgent	Deterministic fallback with rule IDs and no model dependency.
+Tools	EvidenceTools and approved adapters	Structured, deterministic evidence with provenance and safe failure.
+Knowledge	PolicyIngestionService, PolicyRetriever	Chunk, embed, search, threshold, cite and abstain.
+Persistence	JPA repositories and audit writer	Cases, evidence, traces, citations, recommendations and review actions.
+Observability	Metrics, traces and redacted logs	Correlation ID, latency, status and errors without sensitive payloads.
+
+4.3 Common processor contract
+public interface FraudCaseProcessor {
+    FraudCaseRecommendation analyze(FraudCaseContext context);
+}
+
+final class RulesFraudCaseAgent implements FraudCaseProcessor { /* deterministic */ }
+final class SpringAiFraudCaseAgent implements FraudCaseProcessor { /* Spring AI */ }
+final class LangChain4jFraudCaseAgent implements FraudCaseProcessor { /* LangChain4j */ }
+
+4.4 Suggested repository layout
+src/main/java/.../fraudcase/
+  api/              controllers and API DTOs
+  application/      orchestration and processor selection
+  domain/           case, evidence, recommendation and review models
+  agent/common/     framework-neutral contracts and validators
+  agent/springai/   Spring AI adapter and configuration
+  agent/langchain4j/LangChain4j adapter and configuration
+  agent/rules/      deterministic fallback
+  tools/            tool definitions and synthetic adapters
+  knowledge/        ingestion, retrieval and citation mapping
+  persistence/      JPA entities, repositories and audit writer
+src/main/resources/
+  prompts/          system and user templates
+  policies/         synthetic policy documents
+  templates/        Thymeleaf views
+src/test/java/...   unit, integration, contract and evaluation tests
+README.md  AGENTS.md  application-example.yml
+
+5. API, data and configuration
+5.1 Minimum API surface
+Method	Endpoint	Purpose
+POST	/api/cases	Create and validate a fraud case.
+GET	/api/cases/{caseId}	Return case summary and current state.
+POST	/api/cases/{caseId}/investigations	Start or restart bounded analysis.
+GET	/api/cases/{caseId}/evidence	Return evidence items and provenance.
+GET	/api/cases/{caseId}/tool-traces	Return redacted tool execution trace.
+GET	/api/cases/{caseId}/recommendation	Return the latest validated recommendation.
+GET	/api/cases/{caseId}/citations	Return retrieved policy citation metadata.
+POST	/api/cases/{caseId}/messages	Ask a case-scoped follow-up question.
+POST	/api/cases/{caseId}/reviews	Record reviewer disposition and rationale.
+
+5.2 Persistence model
+Entity	Key fields	Notes
+FraudCase	caseId, maskedCustomerRef, status, reportedAt, createdBy	No raw card/account numbers.
+TransactionClaim	claimId, caseId, transactionRef, issueType, statement	Use synthetic or masked values.
+EvidenceItem	evidenceId, caseId, type, severity, valueSummary, provenance, observedAt	One record per material fact or claim.
+Recommendation	recommendationId, caseId, mode, classification, route, risk, confidence, rationale	Validated output only; raw response stored only if approved.
+PolicyCitation	recommendationId, documentId, version, section, chunkId, score	Supports grounded review and reproducibility.
+ToolTrace	traceId, caseId, toolName, requestHash, status, durationMs, resultSummary	Never log secret values or full sensitive payloads.
+ReviewDisposition	reviewId, caseId, reviewerId, disposition, reason, recordedAt	Mandatory reviewer reason.
+AuditEvent	eventId, caseId, eventType, actorType, timestamp, payloadHash	Append-only sequence.
+
+5.3 Mode and safety configuration
+capstone:
+  processor-mode: spring-ai   # rules | spring-ai | langchain4j
+  human-review-required: true
+  allow-financial-actions: false
+  allow-customer-contact: false
+  retrieval:
+    top-k: 4
+    similarity-threshold: 0.72
+  memory:
+    max-messages: 12
+  tools:
+    timeout-ms: 2500
+    deterministic-seed: fraud-training-v1
+
+VERSION DISCIPLINE	Use framework and provider versions approved for the lab. Pin them centrally, keep provider settings behind configuration, and verify the exact API signatures against the selected dependency versions.
+
+6. Spring AI and LangChain4j implementation guide
+Participants may choose Spring AI or LangChain4j as the primary implementation. The domain model, processor contract, tools, policies, output schema and acceptance tests must remain identical. Implementing both is useful for a controlled comparison, but it must not create two divergent applications.
+6.1 Capability mapping
+Capability	Spring AI	LangChain4j	Common requirement
+Model orchestration	ChatClient for fluent calls; ChatModel for lower-level control.	AI Services for declarative agents; ChatLanguageModel/ChatModel for lower-level control.	Provider, credentials, timeout and temperature supplied through configuration.
+Prompts	System/user messages and PromptTemplate resources.	@SystemMessage, @UserMessage and resource/message templates.	Same role, facts, guardrails, variables and output contract.
+Tools	Typed methods/callbacks registered with the client; structured parameters and results.	Methods annotated with @Tool and registered with AI Services.	Allow-list, deterministic training results, timeouts, provenance and safe failure.
+Structured output	Typed entity mapping or output converter, then application validation.	Typed AI Service return or explicit JSON-to-DTO mapping, then validation.	One FraudCaseRecommendation schema; reject invalid enums or missing fields.
+Memory	Case-keyed chat memory through advisor/repository patterns.	Case-keyed ChatMemory; MessageWindowChatMemory and ChatMemoryStore when persistence is needed.	Bounded retention; never share context between case IDs.
+RAG ingestion	Document reader/splitter, metadata and VectorStore.	Document parser/splitter, TextSegment metadata and EmbeddingStore ingestion.	Preserve document ID, version, section and chunk index.
+RAG retrieval	SearchRequest plus advisor or custom retriever.	EmbeddingStoreContentRetriever and RetrievalAugmentor, or custom retrieval.	Configurable Top-K and threshold; return citations; abstain on no match.
+Observability	Framework observations with Micrometer/OpenTelemetry integration.	Listeners/hooks plus Micrometer/OpenTelemetry integration.	Correlation ID, latency, token/usage metadata if available, and redaction.
+Mode selection	spring-ai profile / conditional bean.	langchain4j profile / conditional bean.	Rules mode remains independent and always testable.
+
+6.2 Prompt contract
+•	Define the role as a payment-fraud and dispute triage assistant, not a final decision maker.
+•	Use only validated case facts, tool results and retrieved policy passages.
+•	Never fabricate evidence, policy text, tool execution or completed actions.
+•	List missing or contradictory information and reduce confidence or abstain appropriately.
+•	Return only the agreed schema; always set humanReviewRequired=true.
+•	Provide concise evidence-linked rationale. Do not expose private model reasoning.
+Variable	Origin	Purpose
+caseSummary	Validated intake DTO	Customer report and transaction facts.
+investigationGoal	Application constant	Keeps the task narrowly scoped.
+toolEvidence	Tool results	Current structured operational evidence.
+policyContext	Retriever	Approved passages and citation metadata.
+conversationContext	Case memory	Follow-up context isolated by case ID.
+outputSchema	Application resource	Constrains the machine-readable response.
+guardrails	System prompt and configuration	Blocks unapproved actions and unsupported claims.
+
+6.3 Spring AI adapter sketch
+Representative structure; adapt to approved Spring AI version
+final class SpringAiFraudCaseAgent implements FraudCaseProcessor {
+  private final ChatClient chatClient;
+  private final RecommendationValidator validator;
+
+  public FraudCaseRecommendation analyze(FraudCaseContext context) {
+    FraudCaseRecommendation result = chatClient.prompt()
+        .system(systemPromptResource)
+        .user(u -> u.text(userTemplate).params(context.promptVariables()))
+        .tools(evidenceTools)
+        .advisors(caseMemoryAdvisor(context.caseId()), policyAdvisor(context))
+        .call()
+        .entity(FraudCaseRecommendation.class);
+    return validator.requireHumanReview(result);
+  }
+}
+
+6.4 LangChain4j adapter sketch
+Representative structure; build the AI Service with model, tools, memory and retrieval augmentation
+interface FraudInvestigationService {
+  @SystemMessage(fromResource = "prompts/fraud-system.txt")
+  FraudCaseRecommendation analyze(
+      @MemoryId String caseId,
+      @UserMessage String casePrompt);
+}
+
+final class LangChain4jFraudCaseAgent implements FraudCaseProcessor {
+  private final FraudInvestigationService service;
+  private final RecommendationValidator validator;
+
+  public FraudCaseRecommendation analyze(FraudCaseContext context) {
+    var result = service.analyze(context.caseId(), context.renderPrompt());
+    return validator.requireHumanReview(result);
+  }
+}
+
+6.5 Tool implementation rules
+Rule	Spring AI implementation	LangChain4j implementation
+Typed contract	Register typed tool methods/callbacks with descriptions and validated parameters.	Annotate typed methods with @Tool and register tool object(s) with the AI Service.
+Provenance	Return toolResultId, observedAt and origin in the result DTO.	Return the same DTO fields from @Tool methods.
+Failure	Convert timeout/not-found into a structured unavailable result.	Return the same structured failure; do not throw sensitive provider details to the model.
+Testing	Invoke tool methods directly and test orchestration with mocked client/model.	Invoke @Tool methods directly and test AI Service adapter with mocked model or service seam.
+Safety	Expose read-only training capabilities only.	Expose the same allow-listed read-only capabilities only.
+
+6.6 RAG pipeline
+1. Validate the policy document and metadata: documentId, title, version, effectiveDate, section and owner.
+2. Split by meaningful headings and token limits; do not break a critical rule across unrelated chunks.
+3. Create Spring AI Document objects or LangChain4j Document/TextSegment objects with equivalent metadata.
+4. Generate embeddings and store chunks in VectorStore or EmbeddingStore.
+5. Build the query from the case type, evidence indicators and investigation goal.
+6. Retrieve Top-K passages above the minimum score; filter by effective version where applicable.
+7. Inject only relevant passages and instruct the model to abstain when context is absent.
+8. Return exact citation metadata to the UI and persist it with the recommendation.
+6.7 Memory and follow-up
+•	Use caseId as the memory identifier in both frameworks.
+•	Limit retained messages and do not store full sensitive payloads in long-lived memory.
+•	Persist memory only through an approved repository/store and document restart behaviour.
+•	Test that a fact introduced in Case A cannot be recalled in Case B.
+•	Follow-up responses must use the same evidence and citation model; they must not bypass recommendation validation.
+6.8 Framework parity tests when both are implemented
+•	Run the same synthetic case set with the same model, temperature, tool fixtures, prompt intent and policy pack.
+•	Assert schema validity, required evidence/citation fields and human-review flag.
+•	Compare tool selection, grounded citations, abstention, latency and implementation complexity.
+•	Document differences without claiming either framework is universally superior.
+7. Sample fraud-related UI screens
+The following screens clarify the minimum participant experience. They are illustrative, use synthetic data and may be implemented with Thymeleaf or another approved front end. Match the information architecture and controls; pixel-perfect reproduction is not required.
+UI RULE	Clearly separate customer claims, tool-observed evidence, model-generated summaries, retrieved policy passages and reviewer decisions. Each item must show provenance.
+
+7.1 Case intake
+ 
+Figure 1 — Fraud case intake
+Minimum implementation requirements
+•	Mask references; validate required fields; label synthetic data.
+•	Capture transaction status, channel, amount, timestamp, masked merchant and customer statement.
+•	Do not permit unmasked card/account data; show field-level validation and save-draft behaviour.
+7.2 Agent investigation and tool execution
+ 
+Figure 2 — Agent investigation and tool execution
+Minimum implementation requirements
+•	Show a bounded plan and the actual tools selected by the application.
+•	Show status, duration, redacted result summary and trace identifier; support failed/timeout states.
+•	Display operational trace only; never reveal hidden chain-of-thought.
+7.3 Recommendation
+ 
+Figure 3 — Structured recommendation
+Minimum implementation requirements
+•	Display classification, risk, route, confidence and human-review flag.
+•	Link every rationale claim to evidence or policy; list missing/contradictory information.
+•	Block rendering or persistence of an invalid recommendation schema.
+7.4 Evidence
+ 
+Figure 4 — Evidence workspace
+Minimum implementation requirements
+•	Separate observed evidence from customer claims and generated summaries.
+•	Show evidence type, severity, concise value, provenance and timestamp.
+•	Allow the reviewer to open the underlying redacted tool result or intake record.
+7.5 Policy citations
+ 
+Figure 5 — Policy citations
+Minimum implementation requirements
+•	Show document ID, version, effective date, section, chunk ID, score and passage.
+•	Provide an Open passage action and make stale/withdrawn policy visibly unavailable.
+•	When nothing meets the threshold, show an abstention state rather than fabricated guidance.
+7.6 Human review
+ 
+Figure 6 — Human review
+Minimum implementation requirements
+•	Offer escalate, request information, reroute and close/override options according to role.
+•	Require a rationale and acknowledgement of missing information before submission.
+•	Persist reviewer identity, timestamp and disposition in the append-only audit sequence.
+7.7 Cross-screen UI acceptance criteria
+Area	Acceptance criteria
+Accessibility	Keyboard navigation; visible focus; labels linked to fields; sufficient contrast; text alternatives for meaningful images; status not conveyed by colour alone.
+Security	No full customer/card/account identifiers; output encoding; CSRF protection; role-based actions; safe error messages.
+Traceability	Every evidence, citation, recommendation and review item has an identifier, timestamp and provenance.
+Error states	Loading, empty, unavailable, partial and retry states for tools/model/vector store; no fabricated fallback text.
+Human control	Recommendation is visibly advisory; no final action occurs without an authorised reviewer disposition.
+Responsive design	Screens remain usable at common desktop widths; tables/cards wrap without losing controls or identifiers.
+Export / audit	If export is added, redact identifiers and include case ID, recommendation version and review status.
+
+8. Implementation plan and definition of done
+8.1 Recommended build phases
+Phase	Focus	Exit evidence
+1. Foundation	Project, domain enums, validation, health endpoint, secure example configuration.	Clean build; intake validation tests; no AI dependency required.
+2. Deterministic core	Persistence, audit events, evidence tools and rules processor.	Same input produces same tools/results; rules mode works with model disabled.
+3. AI adapter	Implement either Spring AI or LangChain4j against FraudCaseProcessor.	Prompt contract, tool calling and validated structured recommendation work.
+4. Grounding	Policy ingestion, embeddings, retrieval and citation mapping.	Relevant queries cite passages; irrelevant queries abstain.
+5. Memory and UI	Case-scoped follow-up memory and six participant screens.	No cross-case leakage; full intake-to-review flow.
+6. Hardening	Failure handling, injection tests, observability, accessibility and role controls.	Security and evaluation tests pass; sensitive logging absent.
+7. Comparison extension	Implement the second framework against the same interfaces.	Parity report across the same approved synthetic cases.
+
+8.2 Core definition of done
+•	Application builds and starts from documented commands in a clean environment.
+•	At least six synthetic cases cover different classifications, routes and evidence conditions.
+•	At least four distinct evidence tools are invoked across the case suite; results are deterministic and traceable.
+•	Rules mode works with the model disabled; AI mode safely handles invalid or unavailable model output.
+•	RAG returns citation metadata and abstains when no relevant policy context is available.
+•	Memory is isolated by case ID and tested for leakage.
+•	No secrets, production data or autonomous financial/customer-impacting actions are present.
+•	Human disposition and rationale are persisted and audited.
+•	All six sample UI capabilities are demonstrable with accessible loading, empty and error states.
+9. Test and evaluation plan
+9.1 Required scenarios
+ID	Scenario	Expected result
+T01	Merchant denied; new device; large location anomaly; policy match.	UNAUTHORISED_TRANSACTION or SUSPICIOUS_TRANSACTION; high risk; fraud route; human review.
+T02	Merchant recognised; cancellation/fulfilment complaint.	MERCHANT_DISPUTE; dispute-operations route.
+T03	Matching transaction fingerprint and duplicate posting.	DUPLICATE_PROCESSING; payment-operations route.
+T04	Missing transaction or customer statement.	Validation error or INSUFFICIENT_EVIDENCE; no invented facts.
+T05	No policy passage above threshold.	Manual review; explicit abstention and no policy claim.
+T06	Contradictory device and location signals.	Contradiction shown; confidence reduced or manual review.
+T07	Model endpoint unavailable.	Rules mode or safe manual-review response; no stack trace leakage.
+T08	Tool timeout or not found.	Structured unavailable evidence and missing-information entry.
+T09	Malformed/unknown recommendation enum.	Validation rejection; result not persisted as approved recommendation.
+T10	Case A memory fact queried from Case B.	No recall; isolation test passes.
+T11	Prompt injection in customer statement or policy content.	Instructions ignored as data; guardrails and tool boundary preserved.
+T12	Reviewer override without reason.	Submission blocked; mandatory rationale error shown.
+
+9.2 Test layers
+Layer	Examples
+Unit	Rules, validators, masking, stable fixture generation, citation mapping, state transitions.
+Tool contract	Argument validation, deterministic output, timeout/not-found and provenance.
+Repository	Migrations, relationships, append-only audit and transaction rollback.
+Adapter contract	Every FraudCaseProcessor implementation returns the same schema and invariants.
+RAG	Relevant retrieval, paraphrase retrieval, no-match abstention, version filtering and stale replacement.
+Memory	Bounded window, case isolation and restart behaviour.
+Web/UI	Controller validation, authorisation, CSRF, encoding, keyboard flow and error states.
+Evaluation	Schema-valid rate, tool selection, citation correctness, abstention and latency on a labelled set.
+
+9.3 Suggested measures
+Dimension	Measure
+Schema reliability	Percentage of AI responses accepted by DTO/schema validation.
+Tool correctness	Expected calls, unexpected calls, valid arguments and successful provenance mapping.
+Retrieval quality	Recall@K for labelled queries and percentage of citations mapped to expected sections.
+Groundedness	Rationale claims supported by linked evidence/policy passages.
+Abstention	Pass rate on missing, contradictory and no-policy cases.
+Safety	Human-review flag rate; blocked-action tests; prompt-injection pass rate.
+Performance	Median and p95 end-to-end time; tool/model/retrieval latency components.
+Parity	Differences between frameworks on the same fixtures when both are implemented.
+
+10. Responsible AI, security and operations
+Risk	Required control	Evidence to show
+Sensitive data leakage	Synthetic/masked data; field allow-list; output/log redaction; retention limits.	Fixtures, masking tests and redacted logs.
+Hallucinated evidence	Typed tools; provenance; schema validation; abstention.	Missing-evidence and malformed-output tests.
+Unsupported policy claim	Thresholded RAG; exact citation metadata; passage display.	No-match test and citation screen.
+Prompt injection	Treat case text and policy passages as untrusted data; preserve system/tool boundaries.	Injection tests and recorded result.
+Excessive permissions	Read-only allow-listed tools; least-privilege filesystem/repository/MCP scope; timeouts.	Tool registry and scoped configuration.
+Autonomous action	No card block, refund, credit, transfer, report or contact tool.	Guardrail test; humanReviewRequired always true.
+Cross-case leakage	Case-keyed memory and authorisation on every case endpoint.	Isolation and access-control tests.
+Audit tampering	Append-only events; reviewer identity; payload hash; restricted update/delete.	Repository test and audit view.
+Model/provider outage	Rules path and manual-review safe state.	Failure test with model disabled.
+Unfair or opaque routing	Evidence-linked rationale; no protected-attribute use; reviewer control.	Feature allow-list and review checklist.
+
+NEVER AUTOMATE	The capstone may recommend a route, priority or evidence request. It must not execute a financial, customer-impacting, compliance or account-control action.
+
+10.1 Observability requirements
+•	Generate a correlation ID for every investigation and propagate it across application, tool, retrieval and model spans.
+•	Record tool name, status, duration and redacted result summary; record retrieval count/scores and model latency.
+•	Do not log raw prompts or responses by default when they may contain case data; use hashes and approved summaries.
+•	Expose health for database, configured model provider and vector store without revealing credentials.
+•	Alert or visibly flag repeated tool failures, invalid-output rate and unavailable policy retrieval.
+11. Submission, review and evaluation
+11.1 Submission checklist
+•	☐ README with prerequisites, configuration, build/run/test commands and sample requests.
+•	☐ AGENTS.md with technology, quality, security and verification rules.
+•	☐ Framework-neutral domain/application code plus rules and selected AI adapter(s).
+•	☐ Tests, migrations, deterministic fixtures and synthetic policy documents.
+•	☐ application-example.yml or .env.example with placeholders only.
+•	☐ Prompt templates, output schema and a short prompt-change log.
+•	☐ Architecture diagram, mode-selection explanation and data-flow description.
+•	☐ Six UI capabilities demonstrated with screenshots or a runnable UI.
+•	☐ Evaluation summary, limitations, residual risks and self-review.
+11.2 Evaluation rubric
+Category	Points	Full-credit indicators
+Business scope and workflow	10	Fraud/dispute scenario, roles, states, route labels and safe boundaries are complete.
+Architecture and framework use	15	Layered design; common processor contract; correct Spring AI or LangChain4j integration.
+Agentic flow and prompts	15	Bounded plan/act/observe flow; strong guardrails; typed output; safe failure.
+Tools and evidence	15	Useful deterministic tools, provenance, argument validation, failure handling and trace.
+RAG and policy citations	15	Metadata-rich ingestion, thresholded retrieval, exact citations, abstention and tests.
+Memory, persistence and audit	10	Case isolation, stored artifacts, append-only audit and reviewer disposition.
+UI and human review	10	Six capabilities, accessible states, evidence separation and mandatory reviewer rationale.
+Testing and security	10	Automated tests, reproducible build, no secrets, injection handling and no autonomous action.
+
+11.3 Automatic review concerns
+•	The project is a superficial rename and does not implement fraud-specific entities, evidence, tools, states or screens.
+•	The application is only a chatbot and does not call tools, retrieve policy or persist an auditable recommendation.
+•	The UI displays unsupported model reasoning, hides evidence gaps or allows a result to bypass human review.
+•	Tests call live services by default, require committed credentials or use production-like personal data.
+•	Spring AI and LangChain4j implementations, when both exist, diverge in business rules or output schema.
+12. Participant starter pack
+12.1 Sample case request
+POST /api/cases
+{
+  "maskedCustomerRef": "CUST-••••-4821",
+  "transactionRef": "TXN-2026-784102",
+  "amount": 48750.00,
+  "currency": "INR",
+  "occurredAt": "2026-11-06T08:42:00+05:30",
+  "status": "POSTED",
+  "channel": "CARD_NOT_PRESENT",
+  "maskedMerchant": "NORTHSTAR DIGITAL ••••73",
+  "issueType": "MERCHANT_NOT_RECOGNISED",
+  "customerStatement": "I do not recognise this purchase and still have my card.",
+  "syntheticDataConfirmed": true,
+  "reviewRequired": true
+}
+
+12.2 Expected observable behaviour
+•	Case is created and transitions from NEW to ENRICHING.
+•	Transaction, device, location, merchant, earlier-dispute and policy tools are eligible; the trace records actual selections.
+•	Relevant synthetic dispute and escalation passages are retrieved with exact metadata.
+•	Recommendation is structured, grounded, saved and marked for human review.
+•	Unavailable authentication outcome appears in missingInformation rather than being invented.
+•	Rules mode can process the same case without the model.
+12.3 Suggested synthetic policy header
+documentId: POL-CNP-017
+title: Card-Not-Present Dispute Handling Procedure
+version: 3.2
+effectiveDate: 2026-10-01
+owner: Payment Fraud Operations
+classification: SYNTHETIC_TRAINING
+section: 3.2 Initial fraud routing
+
+12.4 Self-review questions
+1. Can I explain why the workflow is agentic rather than only generative?
+2. Which facts come from validated intake, tools, policy retrieval and reviewer input?
+3. What happens when a tool, model, database or vector store is unavailable?
+4. How do I prove that one case cannot recall another case’s context?
+5. How does the system behave when policy context is absent, stale or contradictory?
+6. Why is the output a recommendation rather than an automated decision?
+7. Can I trace a UI action through controller, application service, processor, tools, retrieval and persistence?
+8. If I implemented both frameworks, what remained identical and what differed?
+9. What would need to change before this design could be considered for a controlled bank sandbox?
+12.5 Demonstration script
+1. Introduce the business problem, scope and safety boundary.
+2. Show the repository structure and mode configuration.
+3. Create the sample fraud case through the intake screen.
+4. Run the investigation and show the actual tool trace and one failure/unknown state.
+5. Open evidence items and explain provenance.
+6. Show retrieved policy passages, scores and exact citation metadata.
+7. Open the structured recommendation and identify missing information.
+8. Submit a human disposition with a reviewer reason and show the audit event.
+9. Switch to rules mode and process a second deterministic case.
+10. Summarise tests, limitations and any Spring AI/LangChain4j comparison findings.
+FINAL REMINDER	Build the payment fraud investigation and dispute resolution agent described in this guide. Keep AI framework code behind adapters, keep data synthetic, ground every procedural claim, and retain human control.
+

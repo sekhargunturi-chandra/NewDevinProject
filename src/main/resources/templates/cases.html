@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Fraud Case Assistant - Cases</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<header>
+    <h1>Fraud Case Assistant <span class="synthetic">synthetic training data</span></h1>
+    <nav>
+        <span class="muted">mode: <b th:text="${mode}">rules</b></span>
+        <a th:href="@{/ui/cases/new}">New case</a>
+        <a th:href="@{/logout}">Logout</a>
+    </nav>
+</header>
+<main>
+    <div class="panel">
+        <h2>Fraud cases</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Case ID</th><th>Customer (masked)</th><th>Transaction</th>
+                <th>Merchant</th><th>Issue</th><th>Status</th><th>Created</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="c : ${cases}">
+                <td><a th:href="@{/ui/cases/{id}(id=${c.caseId})}" th:text="${c.caseId}">CASE-1</a></td>
+                <td th:text="${c.maskedCustomerRef}"></td>
+                <td th:text="${c.transactionRef}"></td>
+                <td th:text="${c.maskedMerchant}"></td>
+                <td th:text="${c.issueType}"></td>
+                <td><span class="badge badge-status" th:text="${c.status}"></span></td>
+                <td th:text="${#temporals.format(c.createdAt, 'yyyy-MM-dd HH:mm')}"></td>
+            </tr>
+            <tr th:if="${#lists.isEmpty(cases)}">
+                <td colspan="7" class="muted">No cases yet. Create one from the intake form.</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+</body>
+</html>

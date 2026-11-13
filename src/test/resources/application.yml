@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:fasystem-test;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+capstone:
+  processor-mode: rules
+  human-review-required: true
+  allow-financial-actions: false
+  allow-customer-contact: false
+  llm:
+    provider: demo
+    api-key: ""
+  retrieval:
+    top-k: 4
+    similarity-threshold: 0.25
+  memory:
+    max-messages: 12
+  tools:
+    timeout-ms: 2500
+    deterministic-seed: fraud-training-v1

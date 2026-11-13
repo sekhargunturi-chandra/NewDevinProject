@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: fraud-case-assistant
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/fasystem?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${DB_USER:fauser}
+    password: ${DB_PASSWORD:fapass123}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  thymeleaf:
+    cache: false
+
+server:
+  port: 8080
+
+capstone:
+  # rules | spring-ai | langchain4j
+  processor-mode: ${PROCESSOR_MODE:rules}
+  human-review-required: true
+  allow-financial-actions: false
+  allow-customer-contact: false
+  llm:
+    # demo = offline deterministic model for development/demos; plug a real
+    # provider ChatModel bean in for production-like runs.
+    provider: ${LLM_PROVIDER:demo}
+    api-key: ${LLM_API_KEY:}
+  retrieval:
+    top-k: 4
+    similarity-threshold: 0.25
+  memory:
+    max-messages: 12
+  tools:
+    timeout-ms: 2500
+    deterministic-seed: fraud-training-v1
+
+logging:
+  level:
+    com.capstone.fraudcase: INFO
