@@ -7,3 +7,5 @@ target/
 *.iml
 .vscode/
 .DS_Store
+scripts/narration/*.wav
+scripts/narration/*.mp3
