@@ -16,6 +16,10 @@
     </div>
 
     <form th:action="@{/ui/cases}" method="post" th:object="${caseIntakeRequest}">
+        <div class="alert alert-error" th:if="${#fields.hasErrors('*')}">
+            <strong>Please fix:</strong>
+            <ul><li th:each="e : ${#fields.errors('*')}" th:text="${e}"></li></ul>
+        </div>
         <div class="grid">
             <div class="panel">
                 <h2>Customer</h2>
@@ -25,6 +29,7 @@
 
                 <label for="homeRegion">Home region</label>
                 <input id="homeRegion" th:field="*{homeRegion}" placeholder="IN-MH" required>
+                <div class="muted" th:errors="*{homeRegion}"></div>
             </div>
 
             <div class="panel">
@@ -35,12 +40,15 @@
 
                 <label for="amount">Amount</label>
                 <input id="amount" th:field="*{amount}" type="number" step="0.01" min="0.01" required>
+                <div class="muted" th:errors="*{amount}"></div>
 
                 <label for="currency">Currency (ISO)</label>
                 <input id="currency" th:field="*{currency}" placeholder="INR" maxlength="3" required>
+                <div class="muted" th:errors="*{currency}"></div>
 
                 <label for="occurredAt">Occurred at</label>
-                <input id="occurredAt" th:field="*{occurredAt}" placeholder="2026-11-06T08:42:00+05:30" required>
+                <input id="occurredAt" th:field="*{occurredAt}" type="datetime-local" required>
+                <div class="muted" th:errors="*{occurredAt}"></div>
 
                 <label for="status">Transaction status</label>
                 <select id="status" th:field="*{status}">
@@ -54,6 +62,7 @@
 
                 <label for="maskedMerchant">Masked merchant</label>
                 <input id="maskedMerchant" th:field="*{maskedMerchant}" placeholder="NORTHSTAR DIGITAL ••••73" required>
+                <div class="muted" th:errors="*{maskedMerchant}"></div>
             </div>
 
             <div class="panel">
@@ -79,6 +88,8 @@
                     <option value="false">No</option>
                     <option value="true">Yes</option>
                 </select>
+                <div class="muted" th:errors="*{cardPossession}"></div>
+                <div class="muted" th:errors="*{merchantRecognised}"></div>
             </div>
         </div>
 

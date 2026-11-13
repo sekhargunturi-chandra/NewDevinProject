@@ -14,13 +14,14 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 public record CaseIntakeRequest(
-        @NotBlank @Pattern(regexp = "^[A-Z0-9*•\\-]{4,40}$",
-                message = "masked customer reference required (no raw identifiers)")
+        @NotBlank @Pattern(regexp = "^[A-Za-z0-9*•\\-]{4,40}$",
+                message = "letters, digits, •, * or - only, e.g. CUST-••••-4821")
         String maskedCustomerRef,
 
         @NotBlank @Size(max = 60) String homeRegion,
 
-        @NotBlank @Pattern(regexp = "^[A-Z0-9\\-]{4,40}$") String transactionRef,
+        @NotBlank @Pattern(regexp = "^[A-Za-z0-9\\-]{4,40}$",
+                message = "letters, digits or - only, e.g. TXN-2026-784102") String transactionRef,
 
         @NotNull @DecimalMin(value = "0.01") BigDecimal amount,
 
@@ -33,7 +34,7 @@ public record CaseIntakeRequest(
         @NotNull TxnChannel channel,
 
         @NotBlank @Size(max = 80) @Pattern(regexp = "^[^\\d]*\\d{0,4}$|.*•.*",
-                message = "merchant must be masked") String maskedMerchant,
+                message = "masked merchant only — use • or at most 4 digits, e.g. NORTHSTAR ••••73") String maskedMerchant,
 
         @NotNull IssueType issueType,
 
